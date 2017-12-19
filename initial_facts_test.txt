@@ -1,0 +1,4 @@
+prof(alice)
+prof(bob)
+paid(alice)
+paid(bob)
