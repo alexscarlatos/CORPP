@@ -22,5 +22,5 @@ place(erin,lab).
 paid(alice).
 paid(bob).
 registered(dan).
-currentTime(morning).
-currentPerson(erin).
+currentTime(night).
+currentPerson(dan).

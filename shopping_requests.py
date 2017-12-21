@@ -1,36 +1,5 @@
 import sys
-import os
-import subprocess
-import re
-import numpy as np
 import corpp
-
-pathToXSB = "../../../xsb/bin/xsb"
-nameOfPrologFile = "shopping_requests"
-nameOfGetPredicate = "getTasks"
-
-pathToPOMDPSolve = "../../../pomdp-solve-5.4/src/pomdp-solve"
-nameOfPOMDPFile = "shopping_requests"
-
-domainFilename = "domain_test.txt"
-initialFactsFilename = "initial_facts_test.txt"
-defaultsFilename = "defaults.txt"
-
-init_state_vars = [
-    ("What is the time of day (morning, noon, or night)?\n", "currentTime", ["morning", "noon", "night"]),
-    ("Who am I speaking with?\n", "currentPerson", [])
-]
-
-worldVariables = ["item", "room", "person"]
-
-def fact(name, params):
-    return name + "(" + ','.join(params) + ")"
-
-# assuming each world has format "(a1,a2,...,prob)"
-# return tuple of format ([a1,a2,...], prob)
-def getWorldTuple(world):
-    vals = world.strip("()").rsplit(",", maxsplit=1)
-    return (vals[0].split(","), float(vals[1]))
 
 def getStateNames(states):
     return ["_".join(s[0]) for s in states]
@@ -41,107 +10,63 @@ def getStateProbs(states):
 def getStateRoundedSum(states):
     return sum([float(p) for p in getStateProbs(states)])
 
-def getStartingPolicyNode(alpha_filename, initialBelief):
-    with open(alpha_filename) as alphaFile:
-        bestNode = 0
-        maxDotProd = 0
-        nodeIndex = 0
-        lineState = 1
-
-        # file format is <actionIndex>\n<stateVector>\n[repeat...]
-        # the best starting node is the one whose vector has the highest dot product with the initial belief state
-        for line in alphaFile:
-            if lineState == 2:
-                vals = line.split(' ')
-                dotProd = sum([float(a) * b for (a,b) in zip(vals, initialBelief)])
-                if dotProd > maxDotProd:
-                    maxDotProd = dotProd
-                    bestNode = nodeIndex
-            
-            lineState += 1
-            if lineState == 3:
-                lineState = 0
-                nodeIndex += 1
-        
-        return bestNode
-
-# because nodes can have a value of >= 0 or '-'
-def getNodeNum(node):
-    try:
-        return int(node)
-    except:
-        return -1
-
 if __name__ == "__main__":
-    verbose = len(sys.argv) > 1 and sys.argv[1] == "-v"
+    # variables specific to shopping requests test case
+    init_state_vars = [
+        ("What is the time of day (morning, noon, or night)?\n    ", "currentTime", ["morning", "noon", "night"]),
+        ("Who am I speaking with?\n    ", "currentPerson", [])
+    ]
+    worldVariables = ["item", "room", "person"]
+    nameOfPrologFile = "shopping_requests"
+    nameOfGetPredicate = "getTasks"
+    nameOfPOMDPFile = "shopping_requests"
+    defaultsFilename = "defaults.txt"
 
-    # first step is to obtain defaults for LR/PR
-    defaults = []
+    # variables that can be set from command line params
+    verbose = False
+    verbosePOMDP = False
+    pathToXSB = "xsb"
+    pathToPOMDPSolve = "pomdp-solve"
+    domainFilename = "domain_1.txt"
+    initialFactsFilename = "initial_facts_1.txt"
+    epsilon = 50
+    rewards = ["-10","-1","50","-100"]
 
-    # read database of variables and possible values
-    domain = {}
-    with open(domainFilename, "r") as domain_file:
-        for line in domain_file:
-            # each line has variable name, followed by list of predefined values
-            l = line.strip('\n').split(':')
-            domain[l[0]] = []
-            for v in l[1].split(','):
-                defaults.append(fact(l[0], [v]))
-                domain[l[0]].append(v)
-    if verbose:
-        print("Retrieved initial domain:")
-        print(domain)
-    
-    # read database of facts - each line is prolog fact
-    with open(initialFactsFilename, "r") as initial_facts_file:
-        for line in initial_facts_file:
-            defaults.append(line.strip('\n'))
-    # TODO: if verbose: print("Retrieved initial facts:") ...
-    
-    # ask for necessary state variables
-    for sv in init_state_vars:
-        v = input(sv[0])
-        v = v.replace(" ", "_")
-        if len(sv[2]) > 0:
-            while (not v in sv[2]):
-                print("Improper value, please try again")
-                v = input(sv[0])
-        defaults.append(fact(sv[1], [v]))
+    # get parameters from command line
+    for i, a in enumerate(sys.argv):
+        if a == "-v":
+            verbose = True
+        if a == "-vp":
+            verbosePOMDP = True
+        if a == "-xsb" and i < len(sys.argv) - 1:
+            pathToXSB = sys.argv[i + 1]
+        if a == "-pomdp" and i < len(sys.argv) - 1:
+            pathToPOMDPSolve = sys.argv[i + 1]
+        if a == "-dom" and i < len(sys.argv) - 1:
+            domainFilename = sys.argv[i + 1]
+        if a == "-facts" and i < len(sys.argv) - 1:
+            initialFactsFilename = sys.argv[i + 1]
+        if a == "-epsilon" and i < len(sys.argv) - 1:
+            epsilon = int(sys.argv[i + 1])
+        if a == "-r" and i < len(sys.argv) - 1:
+            rewards = sys.argv[i + 1].split(',')
 
-    # write defaults to file
-    with open(defaultsFilename, "w") as defaults_file:
-        defaults_file.write(".\n".join(defaults) + ".")
+    # get possible worlds from LR/PR
+    domain, possibleWorlds = corpp.getPossibleWorlds(nameOfPrologFile, nameOfGetPredicate, init_state_vars=init_state_vars, domainFilename=domainFilename, initialFactsFilename=initialFactsFilename, defaultsFilename=defaultsFilename, pathToXSB=pathToXSB, verbose=verbose)
 
-    # launch Prolog
-    proc = subprocess.Popen([pathToXSB], stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-
-    # run LR/PR program
-    prologFileCmd = "[" + nameOfPrologFile + "]."
-    predicateCmd = nameOfGetPredicate + "('" + defaultsFilename + "',W)."
-    fullCmd = "{}\n{}".format(prologFileCmd, predicateCmd)
-    if verbose:
-        print("Running LR/PR in XSB...\n")
-    prologOutput = proc.communicate(input=str.encode(fullCmd))[0].decode()
-
-    # retrieve possible worlds from Prolog output
-    inputStart = prologOutput.index('[')
-    inputEnd = prologOutput.index(']')
-    possibleWorlds = re.split(',*task', prologOutput[inputStart+1:inputEnd])
-
-    # states are all possible worlds, along with associated initial probability, plus the terminating state
-    states = [getWorldTuple(world) for world in possibleWorlds if len(world) > 0]
+    # states are all possible worlds plus the terminating state
+    states = possibleWorlds
     # normalize state probabilities
     state_sum = sum([s[1] for s in states])
     states = [(s[0], s[1]/state_sum) for s in states]
+    # pomdp-solve will yell at us if our state probabilities don't add to 1
+    # so if we went under then add to term, and if we went over take away from first state (amts should be negligible)
     rounded_state_sum = getStateRoundedSum(states)
     if rounded_state_sum > 1:
-        # TODO: handle
-        print("rounded state sum > 1")
-    states.insert(0, (["term"], 1 - rounded_state_sum)) # term prob should be 0, but we add in extra amt here to make proper sum
-    
-    if verbose:
-        print("Generated possible worlds:")
-        print('\n'.join([str(s[0]) + ": " + str(s[1]) for s in states]))
+        states[0] = (states[0][0], states[0][1] + (1 - rounded_state_sum))
+        states.insert(0, (["term"], 0))
+    else:
+        states.insert(0, (["term"], 1 - rounded_state_sum))
 
     # actions are all which questions, polar questions, and possible deliveries
     which_qs = []
@@ -215,68 +140,20 @@ if __name__ == "__main__":
         # R: <action> : <start-state> : <end-state> : <observation> %f
         # slight disincentive to ask questions
         for q in which_qs:
-            pomdp_file.write("\nR: " + q + " : * : * : * -1")
+            pomdp_file.write("\nR: " + q + " : * : * : * " + rewards[0])
         for q in polar_qs:
-            pomdp_file.write("\nR: " + q + " : * : * : * -2")
+            pomdp_file.write("\nR: " + q + " : * : * : * " + rewards[1])
         # for each delivery action, give incentive to transition to corresponding state, and disincentive to transition to any other state
         for da in delivery_actions:
             ds = da.split("_", 1)[1]
             for s in getStateNames(states[1:]):
-                pomdp_file.write("\nR: " + da + " : " + s + " : term : * " + ("50" if ds == s else "-100"))
+                pomdp_file.write("\nR: " + da + " : " + s + " : term : * " + (rewards[2] if ds == s else rewards[3]))
 
-    # start pomdp-solve
-    # TODO: set upper bound on horizon?
-    if verbose:
-        print("Running pomdp-solve... (May take a while)\n")
-    else:
-        print("Thinking, please wait...")
-    showPomdpOutput = True
-    if showPomdpOutput:
-        proc = subprocess.Popen([pathToPOMDPSolve, '-pomdp', nameOfPOMDPFile + ".POMDP"])
-    else:
-        proc = subprocess.Popen([pathToPOMDPSolve, '-pomdp', nameOfPOMDPFile + ".POMDP"], stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    deal = proc.communicate()[0]
-    if verbose:
-        print("pomdp-solve complete\n")
-    
-    # find pomdp output files
-    pg_filename = ""
-    alpha_filename = ""
-    for f in os.listdir("."):
-        if f.startswith(nameOfPOMDPFile) and f.endswith(".pg"):
-            pg_filename = f
-        elif f.startswith(nameOfPOMDPFile) and f.endswith(".alpha"):
-            alpha_filename = f
-    if len(pg_filename) == 0 or len(alpha_filename) == 0:
-        print("Error: couldn't find pomdp output files! Quitting...")
+    # get policy graph from PP
+    policy, cur_node, cur_action = corpp.getPolicyGraph(nameOfPOMDPFile, [s[1] for s in states], pathToPOMDPSolve=pathToPOMDPSolve, epsilon=epsilon, verbose=verbose, verbosePOMDP=verbosePOMDP)
+
+    if policy == []:
         exit()
-
-    # build state machine from policy graph
-    policy = []
-    with open(pg_filename) as pg_file:
-        for line in pg_file:
-            vals = re.split("[ \t]+", line.strip())
-            policy.append((int(vals[1]), [getNodeNum(n) for n in vals[2:]]))
-    if verbose:
-        print("Generated policy graph:")
-        for i, n in enumerate(policy):
-            print(str(i) + " - " + actions[n[0]] + " - " + str(n[1]))
-
-    # get starting node/action
-    cur_node = getStartingPolicyNode(alpha_filename, [s[1] for s in states])
-    cur_action = policy[cur_node][0]
-    if verbose:
-        print("Starting at node " + str(cur_node))
-
-    # delete pg and alpha files (so we can run POMDP again without confusing outputs)
-    delOutputFiles = True
-    if delOutputFiles:
-        os.remove(pg_filename)
-        os.remove(alpha_filename)
-
-    print("Hello user!")
-
-    terminating_actions = [i for i in range(len(which_qs) + len(polar_qs), len(actions))]
 
     # given an action, execute and return the observation made
     def executeAction(a):
@@ -313,7 +190,10 @@ if __name__ == "__main__":
             obs = -1
         return obs
 
+    print("\nHello user!")
+
     # follow rules until we reach termination
+    terminating_actions = [i for i in range(len(which_qs) + len(polar_qs), len(actions))]
     while cur_action not in terminating_actions:
         # execute the current action and get the observation
         obs = executeAction(actions[cur_action])

@@ -1,4 +1,5 @@
 prof(alice)
 prof(bob)
+place(alice,office1)
 paid(alice)
 paid(bob)

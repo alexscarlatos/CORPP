@@ -1,0 +1,5 @@
+prof(alice)
+prof(bob)
+paid(alice)
+paid(bob)
+place(alice,office1)

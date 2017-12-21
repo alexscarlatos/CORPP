@@ -1,0 +1,4 @@
+item:coffee,sandwich
+person:alice,bob
+room:lab,office1
+timeOfDay:morning,noon,night

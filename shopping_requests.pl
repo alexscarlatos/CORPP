@@ -84,17 +84,15 @@ task_p(Item, Room, Person, Prob) :-
     ->
     Prob = .8
     ;
-    Prob = .2
-    .
+    Prob = .2.
 
 % probability associations for item
 task_p(Item, Room, Person, Prob) :-
-    probAtTime(Item, Prob)
+    probAtTime(Item, Prob) % references currentTime
     ->
     true
     ;
-    defaultItemProb(Prob)
-    .
+    defaultItemProb(Prob).
 
 % probability associations for person
 task_p(Item, Room, Person, Prob) :-
@@ -102,5 +100,4 @@ task_p(Item, Room, Person, Prob) :-
     ->
     Prob = .7
     ;
-    Prob = .3
-    .
+    Prob = .3.
