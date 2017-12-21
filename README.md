@@ -7,7 +7,7 @@ I implemented the Shopping Requests test case described in the paper.
 ## Usage
 To run the Shopping Requests example, you will need XSB Prolog (http://xsb.sourceforge.net) and pomdp-solve (http://www.pomdp.org/code/index.html). I did not include these as they are platform dependent, and pomdp-solve even recommends that you compile their C code on your machine to get an executable.
 
-Simply run the program like so: '''python shopping_requests.py <options>'''  
+Simply run the program like so: ```python shopping_requests.py <options>```  
 Note: The program will only run with python3
 
 There are several command line options you can use:  
